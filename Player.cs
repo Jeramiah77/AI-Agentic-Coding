@@ -1,6 +1,20 @@
 public class Player
 {
-    private readonly Die _die = new Die();
+    // Stats are kept between 1 and 20 so race modifiers can't produce
+    // a character who can never hit (Strength <= 0), starts dead
+    // (HealthPoints <= 0), or can never miss/never be hurt (stat > 20).
+    public const int MinStat = 1;
+    public const int MaxStat = 20;
+
+    private readonly Die _die;
+
+    public Player() : this(new Die()) { }
+
+    // Lets tests pass in a die with fixed rolls.
+    public Player(Die die)
+    {
+        _die = die;
+    }
 
     public string Name { get; set; } = "";
     public string Race { get; set; } = "";
@@ -91,33 +105,54 @@ public class Player
     private int RollStrength(Messages messages)
     {
         PromptRoll(messages.GetMessage("roll_strength"), messages);
-        Strength = _die.Roll(20);
-
-        int modifier = _die.Roll(4);
-
-        if (Race == "Halfling")
-        {
-            Strength -= modifier;
-            return -modifier;
-        }
-
-        Strength += modifier;
-        return modifier;
+        return GenerateStrength();
     }
 
     private void RollAgility(Messages messages)
     {
         PromptRoll(messages.GetMessage("roll_agility"), messages);
-        Agility = _die.Roll(20);
-
-        if (Race == "Halfling" || Race == "Elf")
-            Agility += _die.Roll(4);
+        GenerateAgility();
     }
 
     private void RollHealthPoints(Messages messages, int strengthModifier)
     {
         PromptRoll(messages.GetMessage("roll_health"), messages);
-        HealthPoints = _die.Roll(20) + strengthModifier;
+        GenerateHealthPoints(strengthModifier);
+    }
+
+    // --- Dice math (no console input, so it can be unit tested) ---
+
+    // Rolls d20 for Strength plus a d4 modifier: Halflings subtract it,
+    // every other race adds it. Returns the modifier, which also applies
+    // to HealthPoints.
+    public int GenerateStrength()
+    {
+        int roll = _die.Roll(20);
+        int modifier = _die.Roll(4);
+
+        if (Race == "Halfling")
+            modifier = -modifier;
+
+        Strength = Math.Clamp(roll + modifier, MinStat, MaxStat);
+        return modifier;
+    }
+
+    // Rolls d20 for Agility; Halflings and Elves add a d4 bonus.
+    public void GenerateAgility()
+    {
+        int agility = _die.Roll(20);
+
+        if (Race == "Halfling" || Race == "Elf")
+            agility += _die.Roll(4);
+
+        Agility = Math.Clamp(agility, MinStat, MaxStat);
+    }
+
+    // Rolls d20 for HealthPoints plus the Strength modifier.
+    // Only a minimum applies: extra health doesn't break combat.
+    public void GenerateHealthPoints(int strengthModifier)
+    {
+        HealthPoints = Math.Max(MinStat, _die.Roll(20) + strengthModifier);
     }
 
     private void PromptForNextAction(Messages messages)
